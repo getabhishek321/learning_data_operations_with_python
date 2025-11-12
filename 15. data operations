@@ -1,0 +1,337 @@
+
+> `https://jsonmock.hackerrank.com/api/food_outlets`
+
+---
+
+## 0. Big picture: how do we “fetch data from sites”?
+
+When you “fetch data” from a site/API, you’re basically doing:
+
+1. **Send a request** (usually HTTP `GET`) to a URL.
+2. **Receive a response** (usually JSON text).
+3. **Convert JSON → Python** (dicts & lists).
+4. **Use Python logic** (loops, conditions, functions) to extract what you want.
+
+You *already* know most pieces (lists, dicts) — we’re just connecting them to a real endpoint.
+
+---
+
+## 1. Setup: using `requests` (the comfy way)
+
+We’ll use the third-party library **`requests`** – it makes HTTP easy.
+
+### Install (run this in terminal / cmd, not in Python):
+
+```bash
+pip install requests
+```
+
+If `pip` doesn’t work, try `python -m pip install requests` or `python3 -m pip install requests`.
+
+---
+
+## 2. Your first API call 💻
+
+Create a file, e.g. `food_outlets_basic.py`, and put this:
+
+```python
+import requests
+
+BASE_URL = "https://jsonmock.hackerrank.com/api/food_outlets"
+
+response = requests.get(BASE_URL)  # send GET request to the URL
+
+print("Status code:", response.status_code)
+print("Raw text:")
+print(response.text[:500])  # show first 500 characters
+```
+
+Run it:
+
+```bash
+python food_outlets_basic.py
+```
+
+If `status_code` is **200**, it means the request worked.
+
+You’ll see some JSON text like:
+
+```json
+{"page":1,"per_page":10,"total":...,"total_pages":...,"data":[{...}, ...]}
+```
+
+(Exact fields may differ a bit; you’ll confirm by printing.)
+
+---
+
+## 3. Convert JSON → Python objects
+
+Now let’s actually *use* the data.
+
+Update your script:
+
+```python
+import requests
+
+BASE_URL = "https://jsonmock.hackerrank.com/api/food_outlets"
+
+response = requests.get(BASE_URL)
+response.raise_for_status()  # this will throw an error if request failed
+
+data = response.json()  # JSON -> Python (dict)
+
+print(type(data))
+print("Top-level keys:", data.keys())
+```
+
+You should see something like:
+
+* `type(data)` -> `<class 'dict'>`
+* `Top-level keys:` -> `dict_keys(['page', 'per_page', 'total', 'total_pages', 'data'])` (or similar)
+
+So:
+
+* `data` is a **dict**
+* `data["data"]` is usually a **list** of individual food outlets
+
+Try printing the first item:
+
+```python
+first_outlet = data["data"][0]
+print(first_outlet)
+print(type(first_outlet))
+```
+
+You’ll probably get another dict with fields like `name`, `city`, `user_rating`, etc.
+
+This is exactly where your knowledge of dicts & lists becomes *real-world*.
+
+---
+
+## 4. Doing something useful with the data
+
+Let’s say we want to print:
+
+> name – city – user rating (if it exists)
+
+Update code:
+
+```python
+import requests
+
+BASE_URL = "https://jsonmock.hackerrank.com/api/food_outlets"
+
+response = requests.get(BASE_URL)
+response.raise_for_status()
+
+data = response.json()
+outlets = data["data"]  # list of outlets
+
+for outlet in outlets:
+    name = outlet.get("name")
+    city = outlet.get("city")
+    # Sometimes rating might be nested, e.g. outlet["user_rating"]["average_rating"]
+    user_rating = outlet.get("user_rating")  # could be dict or something else
+
+    print("-----")
+    print("Name:", name)
+    print("City:", city)
+    print("Raw user_rating field:", user_rating)
+```
+
+Run this once just to *inspect* the structure.
+From what you see, adjust accordingly.
+
+For example, if you see:
+
+```python
+"user_rating": {
+    "average_rating": 4.5,
+    "votes": 123
+}
+```
+
+Then you’d do:
+
+```python
+rating_info = outlet.get("user_rating", {})
+avg_rating = rating_info.get("average_rating")
+votes = rating_info.get("votes")
+
+print(f"{name} ({city}) -> rating: {avg_rating} ({votes} votes)")
+```
+
+You’ve now:
+
+* Called an API
+* Parsed JSON
+* Used dicts & lists to access real data
+* Printed a formatted summary
+
+This is exactly the kind of thing companies expect.
+
+---
+
+## 5. Handling multiple pages (pagination) 🔁
+
+Most Hackerrank APIs are paginated:
+
+* `data["total_pages"]` → total number of pages
+* `?page=1`, `?page=2`, … etc.
+
+Let’s fetch *all* outlets, not just page 1.
+
+```python
+import requests
+
+BASE_URL = "https://jsonmock.hackerrank.com/api/food_outlets"
+
+def fetch_all_outlets():
+    all_outlets = []
+
+    # 1. Get first page to know total_pages
+    first_response = requests.get(BASE_URL, params={"page": 1})
+    first_response.raise_for_status()
+    first_data = first_response.json()
+
+    total_pages = first_data.get("total_pages", 1)
+    print("Total pages:", total_pages)
+
+    # Add data from page 1
+    all_outlets.extend(first_data.get("data", []))
+
+    # 2. Loop remaining pages
+    for page in range(2, total_pages + 1):
+        resp = requests.get(BASE_URL, params={"page": page})
+        resp.raise_for_status()
+        page_data = resp.json()
+        all_outlets.extend(page_data.get("data", []))
+
+    return all_outlets
+
+if __name__ == "__main__":
+    outlets = fetch_all_outlets()
+    print("Total outlets fetched:", len(outlets))
+
+    # Print first 3 as a sample
+    for outlet in outlets[:3]:
+        print(outlet)
+```
+
+Concepts you’ve now applied:
+
+* Functions
+* Loops
+* Query parameters (`params={"page": page}`)
+* Building a combined list from multiple API calls
+
+---
+
+## 6. Make it “problem-like”: filter + compute
+
+Let’s do a slightly more “interview-style” task:
+
+> **Example task:**
+> “Get the average rating of all outlets in a given city.”
+
+We’ll assume:
+
+* the API returns `city` for each outlet
+* rating is in `outlet["user_rating"]["average_rating"]`
+
+```python
+import requests
+
+BASE_URL = "https://jsonmock.hackerrank.com/api/food_outlets"
+
+def fetch_all_outlets():
+    all_outlets = []
+
+    first_response = requests.get(BASE_URL, params={"page": 1})
+    first_response.raise_for_status()
+    first_data = first_response.json()
+
+    total_pages = first_data.get("total_pages", 1)
+    all_outlets.extend(first_data.get("data", []))
+
+    for page in range(2, total_pages + 1):
+        resp = requests.get(BASE_URL, params={"page": page})
+        resp.raise_for_status()
+        page_data = resp.json()
+        all_outlets.extend(page_data.get("data", []))
+
+    return all_outlets
+
+def average_rating_for_city(city_name: str) -> float | None:
+    outlets = fetch_all_outlets()
+    ratings = []
+
+    for outlet in outlets:
+        if outlet.get("city") == city_name:
+            rating_info = outlet.get("user_rating", {})
+            avg_rating = rating_info.get("average_rating")
+            if isinstance(avg_rating, (int, float)):
+                ratings.append(avg_rating)
+
+    if not ratings:
+        return None
+
+    return sum(ratings) / len(ratings)
+
+if __name__ == "__main__":
+    city = "Seattle"   # change this based on what you see in the data
+    avg = average_rating_for_city(city)
+
+    if avg is None:
+        print(f"No outlets found for city: {city}")
+    else:
+        print(f"Average rating for {city}: {avg:.2f}")
+```
+
+This is now **real problem-solving**:
+
+* Data fetching
+* Filtering
+* Aggregation (sum/average)
+* Returning a result
+
+---
+
+## 7. How this leads to “I can do anything in Python”
+
+We won’t literally cover *everything* in one go, but the pattern is:
+
+1. **Understand the data source** (API, file, DB, etc.).
+2. **Fetch/Load the data** (requests, open(), DB driver).
+3. **Represent it in Python** (dicts, lists, classes).
+4. **Transform it** (loops, conditions, comprehensions).
+5. **Package logic into functions & modules.**
+6. **Add robustness** (error handling, logging, tests).
+
+For your “be very good at Python” goal, we can build a path like:
+
+* Stage 1: **APIs & JSON** (what we’re doing now)
+* Stage 2: **Files & CSV/Excel** (pandas basics)
+* Stage 3: **Web scraping (HTML)** with `requests + BeautifulSoup`
+* Stage 4: **Async calls** / faster fetches with `asyncio`
+* Stage 5: **Small projects** (CLI tools, small services, security tools, etc.)
+
+---
+
+## 8. Your next mini-assignment 🧠
+
+Do this in your environment:
+
+1. **Write a script that:**
+
+   * Fetches **all pages** from `food_outlets`.
+   * Prints the **total number** of outlets.
+   * Prints the **top 5 outlets with highest average_rating**, nicely formatted.
+
+2. Make it into a **function** like:
+
+   ```python
+   def top_rated_outlets(n=5):
+       ...
+   ```
+
