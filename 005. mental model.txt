@@ -18,7 +18,7 @@ we’ll use endpoint throughout:
 2. probe the endpoint safely.
 3. perform a minimal request.
 4. verify success (status, headers, content-type).
-5. parse payload (JSON → python).
+5. parse payload (JSON -> python).
 6. explore the schema (keys, types, sample rows).
 7. extract exactly what you need.
 8. handle pagination / filtering / query params.
@@ -60,7 +60,6 @@ visit `?page=1`, `?page=2`. write down:
 
 **example code:**
 
-```python
 import requests
 
 url = "https://jsonmock.hackerrank.com/api/food_outlets"
@@ -69,7 +68,7 @@ resp = requests.get(url)
 print("status:", resp.status_code)
 print("content-type:", resp.headers.get("Content-Type"))
 print("first 120 chars:", resp.text[:120])
-```
+
 
 **if you skip this:** you might try `resp.json()` on a non-JSON error page and crash with a confusing exception.
 
@@ -84,10 +83,10 @@ change the url to a nonsense path (e.g., `.../api/nope`). observe status and con
 
 **example code:**
 
-```python
+
 resp = requests.get(url)
 resp.raise_for_status()  # raises HTTPError if 4xx/5xx
-```
+
 
 **if you skip this:** your script continues with empty or HTML error bodies, causing subtle bugs much later.
 
