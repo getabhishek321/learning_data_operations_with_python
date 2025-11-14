@@ -1,0 +1,449 @@
+Each step has:
+
+* purpose (why it exists)
+* minimal example
+* “what if we skip it?”
+* a micro-exercise
+
+we’ll use endpoint throughout:
+`https://jsonmock.hackerrank.com/api/food_outlets`
+
+---
+
+# 0) the professional’s mental model
+
+**when a dev is told “fetch data from an API,” they silently run this checklist:**
+
+1. understand the contract (URL, method, params, response shape).
+2. probe the endpoint safely.
+3. perform a minimal request.
+4. verify success (status, headers, content-type).
+5. parse payload (JSON → python).
+6. explore the schema (keys, types, sample rows).
+7. extract exactly what you need.
+8. handle pagination / filtering / query params.
+9. add reliability (timeouts, retries, error handling).
+10. wrap it as reusable functions or a tiny module.
+11. (optional) make it a CLI or script with arguments.
+
+we’ll walk this path, step by step.
+
+---
+
+# 1) understand the contract
+
+**purpose:** know what you’re calling and what comes back.
+
+* url: base path + optional query params (e.g., `?page=2`)
+* method: usually `GET` for reads
+* response: usually JSON with paging fields like `page`, `total_pages`, and a `data` list
+
+**example (no code yet):**
+open the URL in a browser:
+`https://jsonmock.hackerrank.com/api/food_outlets`
+
+look at the top-level keys you see (likely `page`, `per_page`, `total`, `total_pages`, `data`).
+
+**if you skip this:** you’ll write code that “works sometimes” but breaks on page 2, or misses fields, or loops forever.
+
+**micro-exercise:**
+visit `?page=1`, `?page=2`. write down:
+
+* total_pages = ?
+* what’s inside each element of `data`? list the keys.
+
+---
+
+# 2) probe the endpoint safely
+
+**purpose:** confirm it’s alive and how it responds without assuming success.
+
+**example code:**
+
+```python
+import requests
+
+url = "https://jsonmock.hackerrank.com/api/food_outlets"
+resp = requests.get(url)
+
+print("status:", resp.status_code)
+print("content-type:", resp.headers.get("Content-Type"))
+print("first 120 chars:", resp.text[:120])
+```
+
+**if you skip this:** you might try `resp.json()` on a non-JSON error page and crash with a confusing exception.
+
+**micro-exercise:**
+change the url to a nonsense path (e.g., `.../api/nope`). observe status and content-type differences. what happens if you call `.json()` on it?
+
+---
+
+# 3) assert success (fail fast)
+
+**purpose:** make bad states obvious immediately.
+
+**example code:**
+
+```python
+resp = requests.get(url)
+resp.raise_for_status()  # raises HTTPError if 4xx/5xx
+```
+
+**if you skip this:** your script continues with empty or HTML error bodies, causing subtle bugs much later.
+
+**micro-exercise:**
+wrap the request with `try/except` and print a friendly message if it fails:
+
+```python
+try:
+    resp = requests.get(url)
+    resp.raise_for_status()
+except requests.HTTPError as e:
+    print("request failed:", e)
+```
+
+---
+
+# 4) parse json into python types
+
+**purpose:** convert the wire format into dicts/lists you can work with.
+
+**example code:**
+
+```python
+data = resp.json()  # dict at the top level
+print(type(data), data.keys())
+```
+
+**if you skip this:** you’ll try to parse by string operations. brittle, error-prone, and a career limiter.
+
+**micro-exercise:**
+print the type of `data["data"]` and the type of its first element.
+
+---
+
+# 5) explore the schema (like a data scientist)
+
+**purpose:** confirm assumptions before you write logic.
+
+**example code:**
+
+```python
+from pprint import pprint
+
+print("keys:", data.keys())
+print("len(data['data']):", len(data["data"]))
+pprint(data["data"][0])  # inspect one item deeply
+```
+
+**if you skip this:** you’ll guess field names, get `KeyError`s, or miss nested structures.
+
+**micro-exercise:**
+for the first outlet, list:
+
+* name
+* city
+* is there a nested `user_rating`? what keys live inside it?
+
+---
+
+# 6) extract fields cleanly
+
+**purpose:** pull only what you need, robustly.
+
+**example code:**
+
+```python
+outlets = data.get("data", [])
+for o in outlets:
+    name = o.get("name")
+    city = o.get("city")
+    rating = (o.get("user_rating") or {}).get("average_rating")
+    print(f"{name} | {city} | rating={rating}")
+```
+
+> note the `(o.get("user_rating") or {})` trick: if `user_rating` is `None`, we still safely `.get()` on `{}`.
+
+**if you skip this:** direct indexing like `o["user_rating"]["average_rating"]` can crash if the key is missing.
+
+**micro-exercise:**
+print top 5 outlet names with their rating, but **only** if rating is a number.
+
+---
+
+# 7) handle pagination (the #1 real-world gotcha)
+
+**purpose:** fetch *all* records, not just page 1.
+
+**example code:**
+
+```python
+import requests
+
+BASE = "https://jsonmock.hackerrank.com/api/food_outlets"
+
+def fetch_all():
+    all_rows = []
+    r1 = requests.get(BASE, params={"page": 1})
+    r1.raise_for_status()
+    j1 = r1.json()
+
+    total_pages = j1.get("total_pages", 1)
+    all_rows.extend(j1.get("data", []))
+
+    for p in range(2, total_pages + 1):
+        r = requests.get(BASE, params={"page": p})
+        r.raise_for_status()
+        all_rows.extend(r.json().get("data", []))
+    return all_rows
+
+rows = fetch_all()
+print("rows fetched:", len(rows))
+```
+
+**if you skip this:** you’ll silently return incomplete results and make wrong decisions on partial data.
+
+**micro-exercise:**
+count how many rows you get from page 1 only vs all pages. compute the difference.
+
+---
+
+# 8) add timeouts (never trust the network)
+
+**purpose:** prevent your program from hanging forever.
+
+**example code:**
+
+```python
+requests.get(BASE, params={"page": 1}, timeout=10)  # seconds
+```
+
+**if you skip this:** your script can hang due to network blips, especially in automation.
+
+**micro-exercise:**
+add `timeout=2` to all calls in `fetch_all()`. (we’ll do retries next.)
+
+---
+
+# 9) add retries with backoff (reliability)
+
+**purpose:** transient network errors happen; retry politely.
+
+**example code (simple manual retry):**
+
+```python
+import time
+import requests
+
+def get_with_retry(url, params=None, retries=3, backoff=0.5):
+    for attempt in range(1, retries + 1):
+        try:
+            r = requests.get(url, params=params, timeout=10)
+            r.raise_for_status()
+            return r
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as e:
+            if attempt == retries:
+                raise
+            time.sleep(backoff * attempt)  # linear backoff
+```
+
+use it inside `fetch_all()`.
+
+**if you skip this:** intermittent failures kill your script even though a second try would succeed.
+
+**micro-exercise:**
+temporarily set `retries=1` vs `retries=3` and think about the trade-offs (speed vs robustness).
+
+---
+
+# 10) separate “fetching” from “processing”
+
+**purpose:** composability and testability.
+
+**example structure:**
+
+```python
+def fetch_all_outlets() -> list[dict]:
+    # returns raw rows (dicts)
+
+def select_summary(rows: list[dict]) -> list[tuple]:
+    # maps each row to (name, city, rating)
+
+def top_n_by_rating(rows: list[dict], n=5) -> list[dict]:
+    # sorts and returns dicts
+```
+
+**if you skip this:** everything is in one blob; hard to test, reuse, or modify.
+
+**micro-exercise:**
+write `select_summary()` that returns a list of `(name, city, rating)` and print the first 5 tuples.
+
+---
+
+# 11) parameterize queries (filters)
+
+**purpose:** APIs often accept filters (e.g., `city`, `page`). even if this mock endpoint only exposes `page`, practice the habit.
+
+**example code:**
+
+```python
+def fetch_page(page: int = 1):
+    return get_with_retry(BASE, params={"page": page})
+
+# if the API had "city" or "name" filters, you'd add them here.
+```
+
+**if you skip this:** your code becomes rigid; small changes require rewrites.
+
+**micro-exercise:**
+pretend the API supports `city=<name>`. sketch how you’d pass it through your functions (even if it does nothing here). this is API-design thinking.
+
+---
+
+# 12) minimal error messages & guardrails
+
+**purpose:** help future-you debug fast.
+
+**example code:**
+
+```python
+def ensure_list(value, context=""):
+    if not isinstance(value, list):
+        raise TypeError(f"expected list at {context}, got {type(value)}")
+    return value
+
+rows = ensure_list(j1.get("data", []), context="top-level data")
+```
+
+**if you skip this:** you’ll hunt mysterious `TypeError: 'NoneType' object is not subscriptable` at 1am.
+
+**micro-exercise:**
+intentionally break something (e.g., pass `None` to `ensure_list`) and observe the helpful error.
+
+---
+
+# 13) bring it together — a tiny, professional script
+
+**this is not a “dump of final code”; it’s the culmination of the steps above with comments explaining the *why*.**
+
+```python
+"""
+goal: robustly fetch *all* food outlets and print the top N by average rating.
+
+teaches:
+- safe requests (timeouts, raise_for_status)
+- pagination
+- schema-safe access (get + defaults)
+- separation of concerns
+- simple retries
+"""
+
+from __future__ import annotations
+import time
+import requests
+from typing import Any
+
+BASE = "https://jsonmock.hackerrank.com/api/food_outlets"
+
+# ---------- reliability ----------
+
+def get_with_retry(url: str, params: dict[str, Any] | None = None,
+                   retries: int = 3, backoff: float = 0.5) -> requests.Response:
+    for attempt in range(1, retries + 1):
+        try:
+            r = requests.get(url, params=params, timeout=10)
+            r.raise_for_status()
+            return r
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as e:
+            if attempt == retries:
+                raise
+            time.sleep(backoff * attempt)
+
+# ---------- fetching ----------
+
+def fetch_page(page: int) -> dict:
+    r = get_with_retry(BASE, params={"page": page})
+    return r.json()
+
+def fetch_all_outlets() -> list[dict]:
+    first = fetch_page(1)
+    total_pages = first.get("total_pages", 1)
+    rows = list(first.get("data", []))
+
+    for p in range(2, total_pages + 1):
+        jp = fetch_page(p)
+        rows.extend(jp.get("data", []))
+    return rows
+
+# ---------- processing ----------
+
+def to_summary(row: dict) -> dict:
+    rating_obj = row.get("user_rating") or {}
+    return {
+        "name": row.get("name"),
+        "city": row.get("city"),
+        "avg_rating": rating_obj.get("average_rating"),
+        "votes": rating_obj.get("votes"),
+    }
+
+def top_n_by_rating(rows: list[dict], n: int = 5) -> list[dict]:
+    summaries = [to_summary(r) for r in rows]
+    summaries = [s for s in summaries if isinstance(s.get("avg_rating"), (int, float))]
+    return sorted(summaries, key=lambda s: s["avg_rating"], reverse=True)[:n]
+
+# ---------- main ----------
+
+if __name__ == "__main__":
+    rows = fetch_all_outlets()
+    best = top_n_by_rating(rows, n=5)
+    for i, s in enumerate(best, 1):
+        print(f"{i}. {s['name']} ({s['city']}) — rating {s['avg_rating']} ({s['votes']} votes)")
+```
+
+**what happens if you skip pieces?**
+
+* skip `raise_for_status()` → you could parse a 500 error page as JSON and crash.
+* skip `timeout` → hangs forever on bad networks.
+* skip pagination → incomplete data, wrong conclusions.
+* skip schema-safe access → one missing key crashes the run.
+* skip separation → hard to test and extend.
+
+---
+
+# 14) mastery exercises (increasing difficulty)
+
+**A. schema & inspection**
+
+1. print all unique cities present in the dataset.
+2. count how many outlets per city (sorted descending).
+
+**B. selection & filtering**
+3) list outlets with `avg_rating >= 4.5` and at least `100` votes.
+4) print the top outlet per city by `avg_rating` (break ties by votes).
+
+**C. robustness**
+5) add a command-line argument `--top N` (default 5). (hint: use `argparse`.)
+6) log (print) a warning if any row lacks `user_rating`.
+
+**D. performance / design**
+7) cache the first page to disk as `cache_page1.json` and reuse if it exists (simple speed-up).
+8) refactor fetching into a tiny class `FoodOutletClient` with methods `.fetch_all()` and `.top_n(n)`.
+
+---
+
+# 15) where we go next (after you finish A–D)
+
+* **files & dataframes:** save results to CSV; load with pandas; basic analysis.
+* **web scraping:** when no API exists, use `requests + BeautifulSoup` ethically.
+* **async fetching:** for APIs that allow parallelism, use `httpx` + `asyncio`.
+* **testing:** write unit tests for `to_summary()` and pagination logic.
+* **packaging:** turn this into a tiny module or CLI tool.
+
+---
+
+## your immediate next step
+
+do these two micro-exercises now:
+
+1. print the unique cities (sorted).
+2. print the count of outlets per city (sorted desc).
