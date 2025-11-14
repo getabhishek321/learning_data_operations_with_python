@@ -22,19 +22,17 @@ We’ll use the third-party library **`requests`** – it makes HTTP easy.
 
 ### Install (run this in terminal / cmd, not in Python):
 
-```bash
 pip install requests
-```
+
 
 If `pip` doesn’t work, try `python -m pip install requests` or `python3 -m pip install requests`.
 
 ---
 
-## 2. Your first API call 💻
+## 2. Your first API call 
 
 Create a file, e.g. `food_outlets_basic.py`, and put this:
 
-```python
 import requests
 
 BASE_URL = "https://jsonmock.hackerrank.com/api/food_outlets"
@@ -44,21 +42,19 @@ response = requests.get(BASE_URL)  # send GET request to the URL
 print("Status code:", response.status_code)
 print("Raw text:")
 print(response.text[:500])  # show first 500 characters
-```
+
 
 Run it:
 
-```bash
 python food_outlets_basic.py
-```
+
 
 If `status_code` is **200**, it means the request worked.
 
 You’ll see some JSON text like:
 
-```json
 {"page":1,"per_page":10,"total":...,"total_pages":...,"data":[{...}, ...]}
-```
+
 
 (Exact fields may differ a bit; you’ll confirm by printing.)
 
@@ -70,7 +66,6 @@ Now let’s actually *use* the data.
 
 Update your script:
 
-```python
 import requests
 
 BASE_URL = "https://jsonmock.hackerrank.com/api/food_outlets"
@@ -82,7 +77,7 @@ data = response.json()  # JSON -> Python (dict)
 
 print(type(data))
 print("Top-level keys:", data.keys())
-```
+
 
 You should see something like:
 
@@ -96,11 +91,10 @@ So:
 
 Try printing the first item:
 
-```python
 first_outlet = data["data"][0]
 print(first_outlet)
 print(type(first_outlet))
-```
+
 
 You’ll probably get another dict with fields like `name`, `city`, `user_rating`, etc.
 
@@ -116,7 +110,6 @@ Let’s say we want to print:
 
 Update code:
 
-```python
 import requests
 
 BASE_URL = "https://jsonmock.hackerrank.com/api/food_outlets"
@@ -137,29 +130,27 @@ for outlet in outlets:
     print("Name:", name)
     print("City:", city)
     print("Raw user_rating field:", user_rating)
-```
+
 
 Run this once just to *inspect* the structure.
 From what you see, adjust accordingly.
 
 For example, if you see:
 
-```python
 "user_rating": {
     "average_rating": 4.5,
     "votes": 123
 }
-```
+
 
 Then you’d do:
 
-```python
 rating_info = outlet.get("user_rating", {})
 avg_rating = rating_info.get("average_rating")
 votes = rating_info.get("votes")
 
 print(f"{name} ({city}) -> rating: {avg_rating} ({votes} votes)")
-```
+
 
 You’ve now:
 
@@ -181,7 +172,6 @@ Most Hackerrank APIs are paginated:
 
 Let’s fetch *all* outlets, not just page 1.
 
-```python
 import requests
 
 BASE_URL = "https://jsonmock.hackerrank.com/api/food_outlets"
@@ -216,7 +206,7 @@ if __name__ == "__main__":
     # Print first 3 as a sample
     for outlet in outlets[:3]:
         print(outlet)
-```
+
 
 Concepts you’ve now applied:
 
@@ -239,7 +229,6 @@ We’ll assume:
 * the API returns `city` for each outlet
 * rating is in `outlet["user_rating"]["average_rating"]`
 
-```python
 import requests
 
 BASE_URL = "https://jsonmock.hackerrank.com/api/food_outlets"
@@ -286,7 +275,7 @@ if __name__ == "__main__":
         print(f"No outlets found for city: {city}")
     else:
         print(f"Average rating for {city}: {avg:.2f}")
-```
+
 
 This is now **real problem-solving**:
 
@@ -330,8 +319,7 @@ Do this in your environment:
 
 2. Make it into a **function** like:
 
-   ```python
    def top_rated_outlets(n=5):
        ...
-   ```
+   
 
