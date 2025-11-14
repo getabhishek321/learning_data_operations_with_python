@@ -93,13 +93,12 @@ resp.raise_for_status()  # raises HTTPError if 4xx/5xx
 **micro-exercise:**
 wrap the request with `try/except` and print a friendly message if it fails:
 
-```python
 try:
     resp = requests.get(url)
     resp.raise_for_status()
 except requests.HTTPError as e:
     print("request failed:", e)
-```
+
 
 ---
 
@@ -109,10 +108,9 @@ except requests.HTTPError as e:
 
 **example code:**
 
-```python
 data = resp.json()  # dict at the top level
 print(type(data), data.keys())
-```
+
 
 **if you skip this:** you’ll try to parse by string operations. brittle, error-prone, and a career limiter.
 
@@ -127,13 +125,12 @@ print the type of `data["data"]` and the type of its first element.
 
 **example code:**
 
-```python
 from pprint import pprint
 
 print("keys:", data.keys())
 print("len(data['data']):", len(data["data"]))
 pprint(data["data"][0])  # inspect one item deeply
-```
+
 
 **if you skip this:** you’ll guess field names, get `KeyError`s, or miss nested structures.
 
