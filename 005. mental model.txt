@@ -172,7 +172,6 @@ print top 5 outlet names with their rating, but **only** if rating is a number.
 
 **example code:**
 
-```python
 import requests
 
 BASE = "https://jsonmock.hackerrank.com/api/food_outlets"
