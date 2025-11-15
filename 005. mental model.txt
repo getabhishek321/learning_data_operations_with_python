@@ -149,7 +149,6 @@ for the first outlet, list:
 
 **example code:**
 
-```python
 outlets = data.get("data", [])
 for o in outlets:
     name = o.get("name")
