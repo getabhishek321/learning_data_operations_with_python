@@ -155,7 +155,7 @@ for o in outlets:
     city = o.get("city")
     rating = (o.get("user_rating") or {}).get("average_rating")
     print(f"{name} | {city} | rating={rating}")
-```
+
 
 > note the `(o.get("user_rating") or {})` trick: if `user_rating` is `None`, we still safely `.get()` on `{}`.
 
